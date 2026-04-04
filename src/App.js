@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+// eslint-disable-next-line no-unused-vars
 import { trackEvent, supabase } from './supabase';
 
 // ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
@@ -637,7 +638,7 @@ function AdminDashboard({ onExit }) {
 
       const now = new Date();
       const todayStr = now.toISOString().slice(0,10);
-      const weekAgo = new Date(now - 7*24*60*60*1000);
+      
 
       const views   = events.filter(e=>e.type==="view");
       const builds  = events.filter(e=>e.type==="build");
