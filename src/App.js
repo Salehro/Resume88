@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import html2pdf from 'html2pdf.js';
 import { trackEvent, supabase } from './supabase';
 
 // ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
@@ -183,21 +182,35 @@ function calcScore(r) {
 function exportPDF(tmplId, pal, resume) {
   const filename = (resume.personal.name || "resume")
     .replace(/\s+/g,"-").toLowerCase() + ".pdf";
+
+  // Build a full standalone HTML page and open it for printing
+  const win = window.open("","_blank");
+  if (!win) {
+    alert("Please allow popups for resume88.com to download your PDF.");
+    return;
+  }
   const html = getPrintHTML(tmplId, pal, resume);
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
 
-  const el = document.createElement("div");
-  el.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:white;";
-  el.innerHTML = html.replace(/<!DOCTYPE[^>]*>|<html[^>]*>|<\/html>|<head>[\s\S]*<\/head>|<body>|<\/body>/gi,"");
-  document.body.appendChild(el);
+  // Wait for images (e.g. profile photo) to load before printing
+  win.onload = () => {
+    win.document.title = filename;
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 500);
+  };
 
-  html2pdf().set({
-    margin:      [10, 10, 10, 10],
-    filename:    filename,
-    image:       { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-    jsPDF:       { unit: "mm", format: "a4", orientation: "portrait" },
-    pagebreak:   { mode: ["avoid-all", "css", "legacy"] },
-  }).from(el).save().then(() => document.body.removeChild(el));
+  // Fallback if onload already fired
+  setTimeout(() => {
+    if (!win.closed) {
+      win.document.title = filename;
+      win.focus();
+      win.print();
+    }
+  }, 1500);
 }
 
 function getPrintHTML(tmplId, pal, r) {
@@ -600,6 +613,8 @@ function AdminDashboard({ onExit }) {
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
 
+  const [error, setError] = useState(null);
+
   const login = () => {
     if (pw === ADMIN_PASSWORD) { setAuthed(true); setPwErr(false); }
     else { setPwErr(true); setPw(""); }
@@ -607,10 +622,13 @@ function AdminDashboard({ onExit }) {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const { data: events } = await supabase
+      const { data: events, error: sbError } = await supabase
         .from("events").select("*").order("created_at", { ascending: false });
-      if (!events) return;
+
+      if (sbError) { setError("Supabase error: " + sbError.message); setLoading(false); return; }
+      if (!events || events.length === 0) { setError("No events found in the database yet."); setLoading(false); return; }
       const now = new Date();
       const todayStr = now.toISOString().slice(0,10);
       const views = events.filter(e=>e.type==="view");
@@ -637,7 +655,7 @@ function AdminDashboard({ onExit }) {
       setData({ views:views.length, builds:builds.length, downloads:downloads.length,
         today:today.length, days, templates, totalTmpl, colors, recent:events.slice(0,12) });
       setLastRefresh(new Date().toLocaleTimeString());
-    } catch(e) { console.error(e); }
+    } catch(e) { setError("Exception: " + e.message); console.error(e); }
     setLoading(false);
   }, []);
 
@@ -697,6 +715,13 @@ function AdminDashboard({ onExit }) {
         {loading && !data ? (
           <div className="flex items-center justify-center h-64 text-gray-400">
             <div className="text-center"><div className="text-4xl mb-3 animate-spin">⏳</div><p>Loading dashboard data...</p></div>
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+            <div className="text-3xl mb-3">⚠️</div>
+            <p className="text-red-600 font-semibold mb-1">Dashboard Error</p>
+            <p className="text-red-500 text-sm">{error}</p>
+            <button onClick={fetchData} className="mt-4 px-4 py-2 bg-red-600 text-white rounded-xl text-sm hover:bg-red-700">Try Again</button>
           </div>
         ) : data ? (<>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
