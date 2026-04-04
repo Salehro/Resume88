@@ -1,29 +1,6 @@
-import { useState, useCallback, useRef } from "react";
-
-// ─── MOCK SUPABASE (artifact preview only — remove in real project) ───────────
-const supabase = {
-  from: () => ({
-    select: () => ({ order: async () => ({ data: [
-      {id:1,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-2*60000).toISOString()},
-      {id:2,type:"build",    template:null,   color:null,      created_at: new Date(Date.now()-5*60000).toISOString()},
-      {id:3,type:"download", template:"modern",  color:"blue", created_at: new Date(Date.now()-8*60000).toISOString()},
-      {id:4,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-15*60000).toISOString()},
-      {id:5,type:"download", template:"sidebar", color:"violet",created_at: new Date(Date.now()-20*60000).toISOString()},
-      {id:6,type:"build",    template:null,   color:null,      created_at: new Date(Date.now()-30*60000).toISOString()},
-      {id:7,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-2*3600000).toISOString()},
-      {id:8,type:"download", template:"classic", color:"teal", created_at: new Date(Date.now()-3*3600000).toISOString()},
-      {id:9,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-5*3600000).toISOString()},
-      {id:10,type:"download",template:"modern",  color:"blue", created_at: new Date(Date.now()-1*86400000).toISOString()},
-      {id:11,type:"build",   template:null,   color:null,      created_at: new Date(Date.now()-2*86400000).toISOString()},
-      {id:12,type:"view",    template:null,   color:null,      created_at: new Date(Date.now()-3*86400000).toISOString()},
-      {id:13,type:"download",template:"creative",color:"rose", created_at: new Date(Date.now()-4*86400000).toISOString()},
-      {id:14,type:"view",    template:null,   color:null,      created_at: new Date(Date.now()-5*86400000).toISOString()},
-      {id:15,type:"build",   template:null,   color:null,      created_at: new Date(Date.now()-6*86400000).toISOString()},
-    ]}) }),
-    insert: async () => {},
-  }),
-};
-const trackEvent = async () => {};
+import { useState, useCallback, useRef, useEffect } from "react";
+import html2pdf from 'html2pdf.js';
+import { trackEvent, supabase } from './supabase';
 
 // ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
 const TRANSLATIONS = {
@@ -202,16 +179,25 @@ function calcScore(r) {
   return { score: Math.min(100, s), tips: tips.slice(0,4) };
 }
 
-// ─── PDF PRINT ────────────────────────────────────────────────────────────────
+// ─── PDF EXPORT ───────────────────────────────────────────────────────────────
 function exportPDF(tmplId, pal, resume) {
-  const win = window.open("","_blank");
-  win.document.write(getPrintHTML(tmplId, pal, resume));
-  win.document.close();
-  win.focus();
-  setTimeout(() => {
-    win.document.title = (resume.personal.name || "resume").replace(/\s+/g,"-").toLowerCase();
-    win.print();
-  }, 700);
+  const filename = (resume.personal.name || "resume")
+    .replace(/\s+/g,"-").toLowerCase() + ".pdf";
+  const html = getPrintHTML(tmplId, pal, resume);
+
+  const el = document.createElement("div");
+  el.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:white;";
+  el.innerHTML = html.replace(/<!DOCTYPE[^>]*>|<html[^>]*>|<\/html>|<head>[\s\S]*<\/head>|<body>|<\/body>/gi,"");
+  document.body.appendChild(el);
+
+  html2pdf().set({
+    margin:      [10, 10, 10, 10],
+    filename:    filename,
+    image:       { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+    jsPDF:       { unit: "mm", format: "a4", orientation: "portrait" },
+    pagebreak:   { mode: ["avoid-all", "css", "legacy"] },
+  }).from(el).save().then(() => document.body.removeChild(el));
 }
 
 function getPrintHTML(tmplId, pal, r) {
@@ -235,7 +221,7 @@ function getPrintHTML(tmplId, pal, r) {
 
   const footer = `<div style="margin-top:24px;padding-top:8px;border-top:1px solid ${mu};text-align:center;font-size:10px;color:${a}">Built with <a href="https://www.resume88.com" style="color:${a};text-decoration:none;font-weight:600">resume88.com</a></div>`;
 
-  const base = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(resume.personal.name||"resume").replace(/\s+/g,"-").toLowerCase()}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#1a1a1a}@media print{@page{size:A4;margin:1cm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>`;
+  const base = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(r.personal.name||"resume").replace(/\s+/g,"-").toLowerCase()}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#1a1a1a}@media print{@page{size:A4;margin:1cm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>`;
   const name = r.personal.name||"Your Name", title=r.personal.title||"";
   const mainSections = `
     ${r.personal.summary?sec("Summary","<p style='font-size:12px;color:#444;line-height:1.6'>"+r.personal.summary+"</p>"):""}
@@ -257,12 +243,11 @@ function getPrintHTML(tmplId, pal, r) {
     ${r.certifications.length?`<div><div style='font-size:10px;text-transform:uppercase;letter-spacing:1px;opacity:.7;margin-bottom:6px'>Certifications</div>${r.certifications.map(c=>"<div style='font-size:11px;opacity:.9;margin-bottom:3px'>"+c.name+"</div>").join("")}</div>`:""}
   `;
 
-  if (tmplId==="sidebar"||tmplId==="creative") return base+`<div style="display:flex;min-height:100vh"><div style="width:33%;background:${a};color:#fff;padding:24px 16px">${sidebarLeft}</div><div style="flex:1;padding:24px 20px">${mainSections}</div></div></body></html>`;
-  if (tmplId==="modern") return base+`<div style="background:linear-gradient(135deg,${dk},${a});color:#fff;padding:28px 36px">${photoHtml?`<div style="display:flex;align-items:center;gap:16px"><div>${photoHtml}</div><div><div style="font-size:26px;font-weight:800">${name}</div><div style="font-size:14px;opacity:.8">${title}</div><div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;opacity:.7">${contact.map(c=>"<span>"+c+"</span>").join("")}</div></div></div>`:`<div style="font-size:26px;font-weight:800">${name}</div><div style="font-size:14px;opacity:.8;margin-top:2px">${title}</div><div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;opacity:.7">${contact.map(c=>"<span>"+c+"</span>").join("")}</div>`}</div><div style="padding:24px 36px">${mainSections}</div></body></html>`;
-  if (tmplId==="corporate") return base+`<div style="height:6px;background:${a}"></div><div style="padding:18px 36px 14px;border-bottom:1px solid ${mu};display:flex;justify-content:space-between;align-items:center">${photoHtml?`<div style="display:flex;align-items:center;gap:14px">${photoHtml}<div><div style="font-size:22px;font-weight:700;color:${dk}">${name}</div><div style="color:${a};font-size:13px;font-weight:600">${title}</div></div></div>`:`<div><div style="font-size:22px;font-weight:700;color:${dk}">${name}</div><div style="color:${a};font-size:13px;font-weight:600">${title}</div></div>`}<div style="text-align:right;font-size:11px;color:#666;line-height:1.8">${contact.map(c=>"<div>"+c+"</div>").join("")}</div></div><div style="padding:20px 36px">${mainSections}</div></body></html>`;
-  if (tmplId==="minimal") return base+`<div style="padding:40px 48px;max-width:720px"><div style="text-align:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid ${a}">${photoHtml?`<div style="margin-bottom:10px;display:flex;justify-content:center">${photoHtml}</div>`:""}<div style="font-size:28px;font-weight:300;letter-spacing:2px;text-transform:uppercase">${name}</div>${title?`<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;color:${a}">${title}</div>`:""}<div style="font-size:11px;color:#888;margin-top:8px;display:flex;justify-content:center;gap:14px;flex-wrap:wrap">${contact.map(c=>"<span>"+c+"</span>").join("")}</div></div>${mainSections}</div></body></html>`;
-  // classic (default)
-  return base+`<div style="padding:32px 40px;max-width:760px"><div style="margin-bottom:18px;padding-bottom:12px;border-bottom:3px solid ${a};display:flex;justify-content:space-between;align-items:center">${photoHtml?`<div style="display:flex;align-items:center;gap:14px">${photoHtml}<div><div style="font-size:24px;font-weight:700;color:${dk}">${name}</div>${title?`<div style="font-size:13px;font-weight:600;color:${a}">${title}</div>`:""}<div style="margin-top:5px;font-size:11px;color:#666;display:flex;gap:12px;flex-wrap:wrap">${contact.map(c=>"<span>"+c+"</span>").join("")}</div></div></div>`:`<div><div style="font-size:24px;font-weight:700;color:${dk}">${name}</div>${title?`<div style="font-size:13px;font-weight:600;color:${a}">${title}</div>`:""}</div><div style="text-align:right;font-size:11px;color:#666;line-height:1.8">${contact.map(c=>"<div>"+c+"</div>").join("")}</div>`}</div>${mainSections}</div></body></html>`;
+  if (tmplId==="sidebar"||tmplId==="creative") return base+`<div style="display:flex;min-height:100vh"><div style="width:33%;background:${a};color:#fff;padding:24px 16px">${sidebarLeft}</div><div style="flex:1;padding:24px 20px">${mainSections}${footer}</div></div></body></html>`;
+  if (tmplId==="modern") return base+`<div style="background:linear-gradient(135deg,${dk},${a});color:#fff;padding:28px 36px">${photoHtml?`<div style="display:flex;align-items:center;gap:16px"><div>${photoHtml}</div><div><div style="font-size:26px;font-weight:800">${name}</div><div style="font-size:14px;opacity:.8">${title}</div><div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;opacity:.7">${contact.map(c=>"<span>"+c+"</span>").join("")}</div></div></div>`:`<div style="font-size:26px;font-weight:800">${name}</div><div style="font-size:14px;opacity:.8;margin-top:2px">${title}</div><div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;opacity:.7">${contact.map(c=>"<span>"+c+"</span>").join("")}</div>`}</div><div style="padding:24px 36px">${mainSections}${footer}</div></body></html>`;
+  if (tmplId==="corporate") return base+`<div style="height:6px;background:${a}"></div><div style="padding:18px 36px 14px;border-bottom:1px solid ${mu};display:flex;justify-content:space-between;align-items:center">${photoHtml?`<div style="display:flex;align-items:center;gap:14px">${photoHtml}<div><div style="font-size:22px;font-weight:700;color:${dk}">${name}</div><div style="color:${a};font-size:13px;font-weight:600">${title}</div></div></div>`:`<div><div style="font-size:22px;font-weight:700;color:${dk}">${name}</div><div style="color:${a};font-size:13px;font-weight:600">${title}</div></div>`}<div style="text-align:right;font-size:11px;color:#666;line-height:1.8">${contact.map(c=>"<div>"+c+"</div>").join("")}</div></div><div style="padding:20px 36px">${mainSections}${footer}</div></body></html>`;
+  if (tmplId==="minimal") return base+`<div style="padding:40px 48px;max-width:720px"><div style="text-align:center;margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid ${a}">${photoHtml?`<div style="margin-bottom:10px;display:flex;justify-content:center">${photoHtml}</div>`:""}<div style="font-size:28px;font-weight:300;letter-spacing:2px;text-transform:uppercase">${name}</div>${title?`<div style="font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:4px;color:${a}">${title}</div>`:""}<div style="font-size:11px;color:#888;margin-top:8px;display:flex;justify-content:center;gap:14px;flex-wrap:wrap">${contact.map(c=>"<span>"+c+"</span>").join("")}</div></div>${mainSections}${footer}</div></body></html>`;
+  return base+`<div style="padding:32px 40px;max-width:760px"><div style="margin-bottom:18px;padding-bottom:12px;border-bottom:3px solid ${a};display:flex;justify-content:space-between;align-items:center">${photoHtml?`<div style="display:flex;align-items:center;gap:14px">${photoHtml}<div><div style="font-size:24px;font-weight:700;color:${dk}">${name}</div>${title?`<div style="font-size:13px;font-weight:600;color:${a}">${title}</div>`:""}<div style="margin-top:5px;font-size:11px;color:#666;display:flex;gap:12px;flex-wrap:wrap">${contact.map(c=>"<span>"+c+"</span>").join("")}</div></div></div>`:`<div><div style="font-size:24px;font-weight:700;color:${dk}">${name}</div>${title?`<div style="font-size:13px;font-weight:600;color:${a}">${title}</div>`:""}</div><div style="text-align:right;font-size:11px;color:#666;line-height:1.8">${contact.map(c=>"<div>"+c+"</div>").join("")}</div>`}</div>${mainSections}${footer}</div></body></html>`;
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
@@ -278,6 +263,8 @@ export default function App() {
 
   const pal = PALETTE_SETS[palKey] || PALETTE_SETS.blue;
 
+  useEffect(() => { trackEvent("view"); }, []);
+
   const update = useCallback((path, val) => {
     setResume(prev => {
       const next = path.length===1 ? {...prev,[path[0]]:val} : {...prev,[path[0]]:{...prev[path[0]],[path[1]]:val}};
@@ -290,12 +277,12 @@ export default function App() {
 
   if (view==="admin") return <AdminDashboard onExit={()=>setView("start")} />;
   if (view==="start") return <StartScreen onGuided={()=>setView("guided")} onManual={()=>setView("editor")} hasSaved={!!saved} onAdmin={()=>setView("admin")} />;
-  if (view==="templates") return <TemplateScreen tmplId={tmplId} palKey={palKey} resume={resume} pal={pal} onSelectTemplate={t=>{setTmplId(t);saveAll(resume,t,palKey);}} onSelectPalette={p=>{setPalKey(p);saveAll(resume,tmplId,p);}} onBack={()=>{ setView("editor"); setShowPreview(true); }} onExport={()=>exportPDF(tmplId,pal,resume)} />;
+  if (view==="templates") return <TemplateScreen tmplId={tmplId} palKey={palKey} resume={resume} pal={pal} onSelectTemplate={t=>{setTmplId(t);saveAll(resume,t,palKey);}} onSelectPalette={p=>{setPalKey(p);saveAll(resume,tmplId,p);}} onBack={()=>{ setView("editor"); setShowPreview(true); }} onExport={()=>{ trackEvent("download",{template:tmplId,color:palKey}); exportPDF(tmplId,pal,resume); }} />;
   if (view==="guided") return <GuidedFlow resume={resume} setResume={setResume} step={step} setStep={setStep} update={update} onFinish={()=>{ setView("editor"); setShowPreview(true); }} onSkip={()=>{ setView("editor"); setShowPreview(false); }} />;
-  return <EditorLayout resume={resume} setResume={setResume} update={update} tmplId={tmplId} pal={pal} tab={tab} setTab={setTab} onTemplates={()=>setView("templates")} onExport={()=>exportPDF(tmplId,pal,resume)} onBack={()=>setView("start")} saveAll={saveAll} showPreviewInit={showPreview} />;
+  return <EditorLayout resume={resume} setResume={setResume} update={update} tmplId={tmplId} pal={pal} tab={tab} setTab={setTab} onTemplates={()=>setView("templates")} onExport={()=>{ trackEvent("download",{template:tmplId,color:palKey}); exportPDF(tmplId,pal,resume); }} onBack={()=>setView("start")} saveAll={saveAll} showPreviewInit={showPreview} palKey={palKey} />;
 }
 
-// ─── START ────────────────────────────────────────────────────────────────────
+// ─── START SCREEN ─────────────────────────────────────────────────────────────
 function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
   const t = TRANSLATIONS[getLang()];
   const isRtl = getLang() === "ar";
@@ -311,7 +298,7 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          access_key: "cef56cba-c7ee-4301-90e7-b2a6f6b62e76",
+          access_key: process.env.REACT_APP_WEB3FORMS_KEY,
           subject: "New message from Resume88",
           from_name: form.name,
           email: form.email,
@@ -324,25 +311,19 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col items-center justify-start p-4 pt-10" dir={isRtl?"rtl":"ltr"}>      {/* FREE badge — big & prominent */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col items-center justify-start p-4 pt-10" dir={isRtl?"rtl":"ltr"}>
       <div className="mb-6 px-5 py-2.5 bg-green-400 text-green-950 font-bold text-sm rounded-full shadow-lg animate-pulse text-center max-w-lg">
         🎉 {t.badge}
       </div>
-
-      {/* Main card */}
       <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center mb-6">
         <div className="text-6xl mb-3">📄</div>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Resume88</h1>
         <p className="text-gray-500 text-sm mb-5">{t.sub}</p>
-
-        {/* Feature pills */}
         <div className="flex justify-center flex-wrap gap-2 mb-7">
           {[`✅ ${t.feat1}`, `✅ ${t.feat2}`, `✅ ${t.feat3}`].map((f,i)=>(
             <span key={i} className="bg-blue-50 text-blue-700 text-xs font-medium px-3 py-1.5 rounded-full border border-blue-100">{f}</span>
           ))}
         </div>
-
-        {/* Buttons */}
         <div className="space-y-3">
           <button onClick={onGuided} className="w-full py-3.5 bg-blue-600 text-white rounded-2xl font-semibold hover:bg-blue-700 transition shadow-md flex items-center justify-center gap-2 text-sm">
             🧙 {t.guided} <span className="text-blue-300 font-normal">{t.guidedSub}</span>
@@ -351,27 +332,15 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
             ✏️ {t.manual}
           </button>
         </div>
-
         {hasSaved && <p className="mt-4 text-xs text-green-600 bg-green-50 rounded-xl py-2 px-3">✅ {t.saved}</p>}
-
-        {/* Built by + links */}
         <p className="mt-6 text-xs text-gray-400 flex items-center justify-center gap-2 flex-wrap">
           🛠 {t.builtBy} ·{" "}
-          <a href="https://github.com/Salehro/resume88" target="_blank" rel="noreferrer"
-            className="text-blue-400 hover:underline">GitHub</a>
-          · 
-          <button onClick={()=>setShowContact(s=>!s)}
-            className="text-blue-400 hover:underline focus:outline-none">
-            Contact
-          </button>
+          <a href="https://github.com/Salehro/resume88" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">GitHub</a>
           ·
-          <button onClick={onAdmin}
-            className="text-gray-300 hover:text-gray-400 focus:outline-none text-xs opacity-40 hover:opacity-70">
-            ⚙
-          </button>
+          <button onClick={()=>setShowContact(s=>!s)} className="text-blue-400 hover:underline focus:outline-none">Contact</button>
+          ·
+          <button onClick={onAdmin} className="text-gray-300 hover:text-gray-400 focus:outline-none text-xs opacity-40 hover:opacity-70">⚙</button>
         </p>
-
-        {/* Inline contact form — slides open */}
         {showContact && (
           <div className="mt-4 border-t pt-4">
             <p className="text-xs text-gray-400 mb-3">{t.contactSub}</p>
@@ -379,18 +348,11 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
               <div className="text-center py-3 text-green-600 font-semibold text-sm">{t.sent}</div>
             ) : (
               <div className="space-y-2">
-                <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}
-                  placeholder={t.namePh}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-                <input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))}
-                  placeholder={t.emailPh} type="email"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-                <textarea value={form.message} onChange={e=>setForm(f=>({...f,message:e.target.value}))}
-                  placeholder={t.msgPh} rows={3}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
+                <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder={t.namePh} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                <input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder={t.emailPh} type="email" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                <textarea value={form.message} onChange={e=>setForm(f=>({...f,message:e.target.value}))} placeholder={t.msgPh} rows={3} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
                 {status==="error" && <p className="text-xs text-red-500">{t.sendErr}</p>}
-                <button onClick={sendMessage} disabled={status==="sending"}
-                  className="w-full py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition disabled:opacity-60">
+                <button onClick={sendMessage} disabled={status==="sending"} className="w-full py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition disabled:opacity-60">
                   {status==="sending" ? t.sending : t.send}
                 </button>
               </div>
@@ -473,10 +435,9 @@ function EditorLayout({resume,setResume,update,tmplId,pal,tab,setTab,onTemplates
       <div className="bg-white border-b px-4 py-2.5 flex items-center justify-between shadow-sm z-10">
         <div className="flex items-center gap-2">
           <button onClick={onBack} className="text-gray-400 hover:text-gray-600 px-1">←</button>
-          <span className="font-bold text-gray-800 text-sm hidden sm:block">📄 Resume Builder</span>
+          <span className="font-bold text-gray-800 text-sm hidden sm:block">📄 Resume88</span>
         </div>
         <div className="flex items-center gap-1.5">
-          {/* Score pill */}
           <div className={`hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-bold ${scoreBg} ${scoreColor}`}>
             {score}% Complete
           </div>
@@ -490,7 +451,6 @@ function EditorLayout({resume,setResume,update,tmplId,pal,tab,setTab,onTemplates
         </div>
       </div>
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
         {!mobPreview && (
           <div className="hidden sm:flex flex-col w-40 bg-white border-r py-3 px-2 gap-0.5 flex-shrink-0">
             {TABS.map(t=>(
@@ -506,7 +466,6 @@ function EditorLayout({resume,setResume,update,tmplId,pal,tab,setTab,onTemplates
             </div>
           </div>
         )}
-        {/* Form */}
         {!mobPreview ? (
           <div className="flex-1 overflow-auto">
             <div className="sm:hidden flex gap-1 p-2 bg-white border-b overflow-x-auto">
@@ -517,10 +476,8 @@ function EditorLayout({resume,setResume,update,tmplId,pal,tab,setTab,onTemplates
               ))}
             </div>
             <div className="p-5 max-w-xl">
-              {/* Tip box */}
               {TIPS[tab] && <div className="mb-4 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">{TIPS[tab]}</div>}
               <TabContent tab={tab} resume={resume} setResume={setResume} update={update} />
-              {/* Score card */}
               {tips.length > 0 && (
                 <div className={`mt-6 border rounded-2xl p-4 ${scoreBg}`}>
                   <div className={`font-bold text-sm mb-2 ${scoreColor}`}>📊 Resume Score: {score}%</div>
@@ -540,7 +497,6 @@ function EditorLayout({resume,setResume,update,tmplId,pal,tab,setTab,onTemplates
             </div>
           </div>
         )}
-        {/* Desktop preview */}
         {!mobPreview && (
           <div className="hidden lg:flex flex-col w-[400px] flex-shrink-0 bg-gray-200 border-l">
             <div className="flex items-center justify-between px-4 py-2 bg-white border-b">
@@ -576,14 +532,12 @@ function SummaryTab({resume,update}) {
     <div>
       <h2 className="text-base font-bold text-gray-800 mb-3">📝 Professional Summary</h2>
       <textarea rows={6} placeholder="Results-driven professional with X years of experience in..."
-        value={resume.personal.summary}
-        onChange={e=>update(["personal","summary"],e.target.value)}
+        value={resume.personal.summary} onChange={e=>update(["personal","summary"],e.target.value)}
         className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
     </div>
   );
 }
 
-// ─── PERSONAL TAB with photo upload ──────────────────────────────────────────
 function Field({label, value, onChange, placeholder="", type="text", half=false}) {
   return (
     <div className={`mb-3 ${half?"flex-1":""}`}>
@@ -594,7 +548,7 @@ function Field({label, value, onChange, placeholder="", type="text", half=false}
   );
 }
 
-function PersonalTab({resume,update,setResume}) {
+function PersonalTab({resume,update}) {
   const fileRef = useRef();
   const handlePhoto = (e) => {
     const file = e.target.files[0];
@@ -606,12 +560,9 @@ function PersonalTab({resume,update,setResume}) {
   return (
     <div>
       <h2 className="text-base font-bold text-gray-800 mb-4">👤 Personal Information</h2>
-      {/* Photo upload */}
       <div className="mb-4 flex items-center gap-4">
         <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden flex-shrink-0 cursor-pointer hover:border-blue-400 transition" onClick={()=>fileRef.current.click()}>
-          {resume.personal.photo
-            ? <img src={resume.personal.photo} alt="profile" className="w-full h-full object-cover" />
-            : <span className="text-2xl">📷</span>}
+          {resume.personal.photo ? <img src={resume.personal.photo} alt="profile" className="w-full h-full object-cover" /> : <span className="text-2xl">📷</span>}
         </div>
         <div>
           <button onClick={()=>fileRef.current.click()} className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100 transition">Upload Photo</button>
@@ -638,8 +589,8 @@ function PersonalTab({resume,update,setResume}) {
   );
 }
 
-// ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
-const ADMIN_PASSWORD = "resume88admin"; // change this to your own password
+// ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
+const ADMIN_PASSWORD = process.env.REACT_APP_ADMIN_PASSWORD;
 
 function AdminDashboard({ onExit }) {
   const [authed, setAuthed] = useState(false);
@@ -658,48 +609,33 @@ function AdminDashboard({ onExit }) {
     setLoading(true);
     try {
       const { data: events } = await supabase
-        .from("events")
-        .select("*")
-        .order("created_at", { ascending: false });
-
+        .from("events").select("*").order("created_at", { ascending: false });
       if (!events) return;
-
       const now = new Date();
       const todayStr = now.toISOString().slice(0,10);
-      const weekAgo = new Date(now - 7*24*60*60*1000);
-
-      const views   = events.filter(e=>e.type==="view");
-      const builds  = events.filter(e=>e.type==="build");
+      const views = events.filter(e=>e.type==="view");
+      const builds = events.filter(e=>e.type==="build");
       const downloads = events.filter(e=>e.type==="download");
-      const today   = events.filter(e=>e.created_at?.slice(0,10)===todayStr);
-
-      // Last 7 days chart
+      const today = events.filter(e=>e.created_at?.slice(0,10)===todayStr);
       const days = Array.from({length:7}, (_,i)=>{
         const d = new Date(now - (6-i)*24*60*60*1000);
         const str = d.toISOString().slice(0,10);
         const label = d.toLocaleDateString("en-US",{weekday:"short"});
-        return {
-          label,
+        return { label,
           views:    events.filter(e=>e.type==="view"     && e.created_at?.slice(0,10)===str).length,
           builds:   events.filter(e=>e.type==="build"    && e.created_at?.slice(0,10)===str).length,
           downloads:events.filter(e=>e.type==="download" && e.created_at?.slice(0,10)===str).length,
         };
       });
-
-      // Template breakdown
       const tmplCounts = {};
       downloads.forEach(e=>{ if(e.template) tmplCounts[e.template]=(tmplCounts[e.template]||0)+1; });
       const totalTmpl = Object.values(tmplCounts).reduce((a,b)=>a+b,0)||1;
       const templates = Object.entries(tmplCounts).sort((a,b)=>b[1]-a[1]);
-
-      // Color breakdown
       const colorCounts = {};
       downloads.forEach(e=>{ if(e.color) colorCounts[e.color]=(colorCounts[e.color]||0)+1; });
       const colors = Object.entries(colorCounts).sort((a,b)=>b[1]-a[1]);
-
       setData({ views:views.length, builds:builds.length, downloads:downloads.length,
-        today:today.length, days, templates, totalTmpl, colors,
-        recent: events.slice(0,12) });
+        today:today.length, days, templates, totalTmpl, colors, recent:events.slice(0,12) });
       setLastRefresh(new Date().toLocaleTimeString());
     } catch(e) { console.error(e); }
     setLoading(false);
@@ -707,30 +643,24 @@ function AdminDashboard({ onExit }) {
 
   useEffect(() => { if (authed) fetchData(); }, [authed, fetchData]);
 
-  // ── LOGIN SCREEN ────────────────────────────────────────────────────────────
   if (!authed) return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
         <div className="text-4xl mb-3">🔐</div>
         <h2 className="text-xl font-bold text-gray-800 mb-1">Admin Access</h2>
         <p className="text-xs text-gray-400 mb-5">Resume88 Dashboard</p>
-        <input type="password" value={pw} onChange={e=>setPw(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&login()}
+        <input type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&login()}
           placeholder="Enter password"
           className={`w-full border ${pwErr?"border-red-400":"border-gray-200"} rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 mb-3`} />
         {pwErr && <p className="text-xs text-red-500 mb-2">Incorrect password</p>}
-        <button onClick={login}
-          className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition">
-          Login
-        </button>
+        <button onClick={login} className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 transition">Login</button>
         <button onClick={onExit} className="mt-3 text-xs text-gray-400 hover:underline">← Back to Resume88</button>
       </div>
     </div>
   );
 
-  // ── DASHBOARD ───────────────────────────────────────────────────────────────
   const TMPL_ICONS = {classic:"📋",sidebar:"▌",modern:"⚡",minimal:"○",corporate:"🏢",creative:"🎨"};
-  const COLOR_HEX  = {blue:"#2563eb",violet:"#7c3aed",teal:"#0f766e",rose:"#e11d48",orange:"#ea580c",slate:"#475569",emerald:"#059669",indigo:"#4f46e5"};
+  const COLOR_HEX = {blue:"#2563eb",violet:"#7c3aed",teal:"#0f766e",rose:"#e11d48",orange:"#ea580c",slate:"#475569",emerald:"#059669",indigo:"#4f46e5"};
 
   const StatCard = ({icon,label,value,sub,color="blue"}) => {
     const colors = {blue:"bg-blue-50 text-blue-700 border-blue-100",green:"bg-green-50 text-green-700 border-green-100",purple:"bg-purple-50 text-purple-700 border-purple-100",orange:"bg-orange-50 text-orange-700 border-orange-100"};
@@ -748,7 +678,6 @@ function AdminDashboard({ onExit }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Top bar */}
       <div className="bg-white border-b px-6 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
           <span className="text-xl">📊</span>
@@ -758,33 +687,24 @@ function AdminDashboard({ onExit }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={fetchData} disabled={loading}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+          <button onClick={fetchData} disabled={loading} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">
             {loading ? "⏳ Loading..." : "🔄 Refresh"}
           </button>
-          <button onClick={onExit}
-            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700">
-            ← Back to App
-          </button>
+          <button onClick={onExit} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700">← Back to App</button>
         </div>
       </div>
-
       <div className="p-6 max-w-6xl mx-auto">
         {loading && !data ? (
           <div className="flex items-center justify-center h-64 text-gray-400">
             <div className="text-center"><div className="text-4xl mb-3 animate-spin">⏳</div><p>Loading dashboard data...</p></div>
           </div>
         ) : data ? (<>
-
-          {/* Stat cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard icon="👁" label="Total Views"     value={data.views.toLocaleString()}     sub="All time"           color="blue"   />
-            <StatCard icon="📄" label="Resumes Built"   value={data.builds.toLocaleString()}    sub="Guided completions" color="purple" />
-            <StatCard icon="⬇" label="PDF Downloads"   value={data.downloads.toLocaleString()} sub="All time"           color="green"  />
-            <StatCard icon="🔥" label="Today"           value={data.today.toLocaleString()}     sub="All events today"   color="orange" />
+            <StatCard icon="👁" label="Total Views"   value={data.views.toLocaleString()}     sub="All time"           color="blue"   />
+            <StatCard icon="📄" label="Resumes Built" value={data.builds.toLocaleString()}    sub="Guided completions" color="purple" />
+            <StatCard icon="⬇" label="PDF Downloads" value={data.downloads.toLocaleString()} sub="All time"           color="green"  />
+            <StatCard icon="🔥" label="Today"         value={data.today.toLocaleString()}     sub="All events today"   color="orange" />
           </div>
-
-          {/* Conversion rate */}
           {data.views > 0 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-6 flex flex-wrap gap-6">
               {[
@@ -800,8 +720,6 @@ function AdminDashboard({ onExit }) {
               ))}
             </div>
           )}
-
-          {/* 7-day chart */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-6">
             <h2 className="font-bold text-gray-700 mb-4 text-sm">📈 Last 7 Days</h2>
             <div className="flex items-end gap-3 h-36">
@@ -809,8 +727,7 @@ function AdminDashboard({ onExit }) {
                 <div key={i} className="flex-1 flex flex-col items-center gap-1">
                   <div className="w-full flex gap-0.5 items-end" style={{height:"100px"}}>
                     {[{v:d.views,c:"#93c5fd"},{v:d.builds,c:"#c4b5fd"},{v:d.downloads,c:"#6ee7b7"}].map(({v,c},j)=>(
-                      <div key={j} className="flex-1 rounded-t transition-all" title={v}
-                        style={{height:`${Math.max((v/maxDay)*100,v>0?8:0)}%`, background:c}} />
+                      <div key={j} className="flex-1 rounded-t transition-all" title={v} style={{height:`${Math.max((v/maxDay)*100,v>0?8:0)}%`,background:c}} />
                     ))}
                   </div>
                   <div className="text-xs text-gray-400">{d.label}</div>
@@ -825,13 +742,10 @@ function AdminDashboard({ onExit }) {
               ))}
             </div>
           </div>
-
           <div className="grid lg:grid-cols-2 gap-6 mb-6">
-            {/* Templates */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <h2 className="font-bold text-gray-700 mb-4 text-sm">🎨 Most Used Templates</h2>
-              {data.templates.length === 0
-                ? <p className="text-xs text-gray-400">No downloads yet</p>
+              {data.templates.length === 0 ? <p className="text-xs text-gray-400">No downloads yet</p>
                 : data.templates.map(([tmpl,count])=>(
                   <div key={tmpl} className="mb-3">
                     <div className="flex justify-between text-xs mb-1">
@@ -839,40 +753,30 @@ function AdminDashboard({ onExit }) {
                       <span className="text-gray-400">{count} ({((count/data.totalTmpl)*100).toFixed(0)}%)</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div className="h-2 rounded-full bg-blue-400 transition-all"
-                        style={{width:((count/data.totalTmpl)*100)+"%"}} />
+                      <div className="h-2 rounded-full bg-blue-400 transition-all" style={{width:((count/data.totalTmpl)*100)+"%"}} />
                     </div>
                   </div>
-                ))
-              }
+                ))}
             </div>
-
-            {/* Colors */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
               <h2 className="font-bold text-gray-700 mb-4 text-sm">🎨 Most Used Colors</h2>
-              {data.colors.length === 0
-                ? <p className="text-xs text-gray-400">No downloads yet</p>
+              {data.colors.length === 0 ? <p className="text-xs text-gray-400">No downloads yet</p>
                 : data.colors.map(([color,count])=>(
                   <div key={color} className="flex items-center gap-3 mb-2.5">
-                    <div className="w-5 h-5 rounded-full flex-shrink-0 border border-gray-100"
-                      style={{background:COLOR_HEX[color]||"#888"}} />
+                    <div className="w-5 h-5 rounded-full flex-shrink-0 border border-gray-100" style={{background:COLOR_HEX[color]||"#888"}} />
                     <div className="flex-1">
                       <div className="flex justify-between text-xs mb-0.5">
                         <span className="font-medium text-gray-700 capitalize">{color}</span>
                         <span className="text-gray-400">{count}</span>
                       </div>
                       <div className="w-full bg-gray-100 rounded-full h-1.5">
-                        <div className="h-1.5 rounded-full transition-all"
-                          style={{width:((count/data.colors[0][1])*100)+"%", background:COLOR_HEX[color]||"#888"}} />
+                        <div className="h-1.5 rounded-full transition-all" style={{width:((count/data.colors[0][1])*100)+"%",background:COLOR_HEX[color]||"#888"}} />
                       </div>
                     </div>
                   </div>
-                ))
-              }
+                ))}
             </div>
           </div>
-
-          {/* Recent activity */}
           <div className="bg-white rounded-2xl border border-gray-100 p-5">
             <h2 className="font-bold text-gray-700 mb-4 text-sm">🕐 Recent Activity</h2>
             <div className="space-y-2">
@@ -885,19 +789,14 @@ function AdminDashboard({ onExit }) {
                 const timeStr = ago < 1 ? "just now" : ago < 60 ? `${ago}m ago` : ago < 1440 ? `${Math.floor(ago/60)}h ago` : time.toLocaleDateString();
                 return (
                   <div key={i} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[e.type]||"bg-gray-50 text-gray-600"}`}>
-                      {icons[e.type]||"•"} {e.type}
-                    </span>
-                    <span className="text-xs text-gray-600 flex-1">{labels[e.type]||e.type}
-                      {e.template && <span className="text-gray-400"> · {e.template}</span>}
-                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colors[e.type]||"bg-gray-50 text-gray-600"}`}>{icons[e.type]||"•"} {e.type}</span>
+                    <span className="text-xs text-gray-600 flex-1">{labels[e.type]||e.type}{e.template && <span className="text-gray-400"> · {e.template}</span>}</span>
                     <span className="text-xs text-gray-400 whitespace-nowrap">{timeStr}</span>
                   </div>
                 );
               })}
             </div>
           </div>
-
         </>) : (
           <div className="text-center text-gray-400 py-20">No data yet. Share your app and come back!</div>
         )}
@@ -916,13 +815,17 @@ const GUIDED_STEPS = [
   {key:"languages", label:"Languages",       icon:"🌐"},
   {key:"extras",    label:"Extras",          icon:"🏆"},
 ];
+
 function GuidedFlow({resume,setResume,step,setStep,update,onFinish,onSkip}) {
   const cur = GUIDED_STEPS[step];
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <div className="bg-white border-b px-5 py-3 flex items-center justify-between">
-        <span className="font-bold text-gray-800">📄 Resume Builder</span>
-        <div className="flex items-center gap-3"><span className="text-sm text-gray-400">{step+1}/{GUIDED_STEPS.length}</span><button onClick={onSkip} className="text-xs text-blue-500 hover:underline">Skip to Editor</button></div>
+        <span className="font-bold text-gray-800">📄 Resume88</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400">{step+1}/{GUIDED_STEPS.length}</span>
+          <button onClick={onSkip} className="text-xs text-blue-500 hover:underline">Skip to Editor</button>
+        </div>
       </div>
       <div className="h-1.5 bg-gray-200"><div className="h-full bg-blue-500 transition-all" style={{width:((step)/GUIDED_STEPS.length*100)+"%"}} /></div>
       <div className="flex flex-1 overflow-hidden">
@@ -943,7 +846,7 @@ function GuidedFlow({resume,setResume,step,setStep,update,onFinish,onSkip}) {
             {step>0 ? <button onClick={()=>setStep(s=>s-1)} className="px-4 py-2 border rounded-xl text-sm text-gray-600 hover:bg-gray-50">← Back</button> : <div/>}
             {step<GUIDED_STEPS.length-1
               ? <button onClick={()=>setStep(s=>s+1)} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700">Next →</button>
-              : <button onClick={onFinish} className="px-6 py-2 bg-green-600 text-white rounded-xl font-semibold text-sm hover:bg-green-700">Finish & Preview 🎉</button>}
+              : <button onClick={()=>{ trackEvent("build"); onFinish(); }} className="px-6 py-2 bg-green-600 text-white rounded-xl font-semibold text-sm hover:bg-green-700">Finish & Preview 🎉</button>}
           </div>
         </div>
       </div>
@@ -997,6 +900,11 @@ function ResumeDoc({tmplId,pal,resume:r}) {
   const CertList = ({dark=false}) => r.certifications.map(c=>(
     <div key={c.id} className="text-xs mb-1" style={dark?{color:"rgba(255,255,255,.9)"}:{}}><span className="font-semibold">{c.name}</span>{c.issuer&&` — ${c.issuer}`}{c.year&&` (${c.year})`}</div>
   ));
+  const Footer = () => (
+    <div className="mt-6 pt-2 border-t text-center text-xs" style={{borderColor:mu,color:a}}>
+      Built with <a href="https://www.resume88.com" style={{color:a,fontWeight:600,textDecoration:"none"}}>resume88.com</a>
+    </div>
+  );
 
   const name = r.personal.name||"Your Name", title=r.personal.title||"";
 
@@ -1009,6 +917,7 @@ function ResumeDoc({tmplId,pal,resume:r}) {
     {r.projects.length>0&&<Sec title="Projects"><ProjList/></Sec>}
     {r.certifications.length>0&&!skipSkills&&<Sec title="Certifications"><CertList/></Sec>}
     {r.hobbies.length>0&&<Sec title="Interests"><p className="text-xs text-gray-600">{r.hobbies.join(" · ")}</p></Sec>}
+    <Footer/>
   </>);
 
   if (tmplId==="classic") return (
@@ -1102,6 +1011,7 @@ function ResumeDoc({tmplId,pal,resume:r}) {
           {r.education.length>0&&<Sec title="Education"><EduList/></Sec>}
           {r.projects.length>0&&<Sec title="Projects"><ProjList/></Sec>}
           {r.hobbies.length>0&&<Sec title="Interests"><p className="text-xs text-gray-600">{r.hobbies.join(" · ")}</p></Sec>}
+          <Footer/>
         </div>
         <div className="w-[32%] p-4 border-l" style={{borderColor:mu,background:lt+"80"}}>
           {r.skills.length>0&&<div className="mb-3"><div className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{color:a}}>Skills</div><SkillTags/></div>}
@@ -1114,7 +1024,7 @@ function ResumeDoc({tmplId,pal,resume:r}) {
   return null;
 }
 
-// ─── SUB EDITORS ─────────────────────────────────────────────────────────────
+// ─── SUB EDITORS ──────────────────────────────────────────────────────────────
 function ExperienceEditor({experience,setResume}) {
   const add = () => setResume(r=>({...r,experience:[...r.experience,{id:uid(),title:"",company:"",location:"",start:"",end:"",bullets:""}]}));
   const upd = (id,f,v) => setResume(r=>({...r,experience:r.experience.map(e=>e.id===id?{...e,[f]:v}:e)}));
@@ -1207,7 +1117,8 @@ function SkillsEditor({skills,setResume}) {
 }
 
 function LanguagesEditor({languages,setResume}) {
-  const [name,setName] = useState(""); const [level,setLevel] = useState("Professional");
+  const [name,setName] = useState("");
+  const [level,setLevel] = useState("Professional");
   const add = () => {
     if (!name.trim()) return;
     setResume(r=>({...r,languages:[...r.languages,{name:name.trim(),level}]}));
