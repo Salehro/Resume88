@@ -1,6 +1,29 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-// eslint-disable-next-line no-unused-vars
-import { trackEvent, supabase } from './supabase';
+import { useState, useCallback, useRef } from "react";
+
+// ─── MOCK SUPABASE (artifact preview only — remove in real project) ───────────
+const supabase = {
+  from: () => ({
+    select: () => ({ order: async () => ({ data: [
+      {id:1,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-2*60000).toISOString()},
+      {id:2,type:"build",    template:null,   color:null,      created_at: new Date(Date.now()-5*60000).toISOString()},
+      {id:3,type:"download", template:"modern",  color:"blue", created_at: new Date(Date.now()-8*60000).toISOString()},
+      {id:4,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-15*60000).toISOString()},
+      {id:5,type:"download", template:"sidebar", color:"violet",created_at: new Date(Date.now()-20*60000).toISOString()},
+      {id:6,type:"build",    template:null,   color:null,      created_at: new Date(Date.now()-30*60000).toISOString()},
+      {id:7,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-2*3600000).toISOString()},
+      {id:8,type:"download", template:"classic", color:"teal", created_at: new Date(Date.now()-3*3600000).toISOString()},
+      {id:9,type:"view",     template:null,   color:null,      created_at: new Date(Date.now()-5*3600000).toISOString()},
+      {id:10,type:"download",template:"modern",  color:"blue", created_at: new Date(Date.now()-1*86400000).toISOString()},
+      {id:11,type:"build",   template:null,   color:null,      created_at: new Date(Date.now()-2*86400000).toISOString()},
+      {id:12,type:"view",    template:null,   color:null,      created_at: new Date(Date.now()-3*86400000).toISOString()},
+      {id:13,type:"download",template:"creative",color:"rose", created_at: new Date(Date.now()-4*86400000).toISOString()},
+      {id:14,type:"view",    template:null,   color:null,      created_at: new Date(Date.now()-5*86400000).toISOString()},
+      {id:15,type:"build",   template:null,   color:null,      created_at: new Date(Date.now()-6*86400000).toISOString()},
+    ]}) }),
+    insert: async () => {},
+  }),
+};
+const trackEvent = async () => {};
 
 // ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
 const TRANSLATIONS = {
@@ -185,7 +208,10 @@ function exportPDF(tmplId, pal, resume) {
   win.document.write(getPrintHTML(tmplId, pal, resume));
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 700);
+  setTimeout(() => {
+    win.document.title = (resume.personal.name || "resume").replace(/\s+/g,"-").toLowerCase();
+    win.print();
+  }, 700);
 }
 
 function getPrintHTML(tmplId, pal, r) {
@@ -207,7 +233,9 @@ function getPrintHTML(tmplId, pal, r) {
 
   const sec = (title, body) => body ? `<div style="margin-bottom:16px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${a};border-bottom:1px solid ${mu};padding-bottom:3px;margin-bottom:8px">${title}</div>${body}</div>` : "";
 
-  const base = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${r.personal.name||"Resume"}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#1a1a1a}@media print{@page{size:A4;margin:1cm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>`;
+  const footer = `<div style="margin-top:24px;padding-top:8px;border-top:1px solid ${mu};text-align:center;font-size:10px;color:${a}">Built with <a href="https://www.resume88.com" style="color:${a};text-decoration:none;font-weight:600">resume88.com</a></div>`;
+
+  const base = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(resume.personal.name||"resume").replace(/\s+/g,"-").toLowerCase()}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#1a1a1a}@media print{@page{size:A4;margin:1cm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}</style></head><body>`;
   const name = r.personal.name||"Your Name", title=r.personal.title||"";
   const mainSections = `
     ${r.personal.summary?sec("Summary","<p style='font-size:12px;color:#444;line-height:1.6'>"+r.personal.summary+"</p>"):""}
@@ -283,7 +311,7 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          access_key: process.env.REACT_APP_WEB3FORMS_KEY,
+          access_key: "cef56cba-c7ee-4301-90e7-b2a6f6b62e76",
           subject: "New message from Resume88",
           from_name: form.name,
           email: form.email,
@@ -611,7 +639,7 @@ function PersonalTab({resume,update,setResume}) {
 }
 
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
-const ADMIN_PASSWORD = "Salehro252541@@resume88"; // change this to your own password
+const ADMIN_PASSWORD = "resume88admin"; // change this to your own password
 
 function AdminDashboard({ onExit }) {
   const [authed, setAuthed] = useState(false);
@@ -638,7 +666,7 @@ function AdminDashboard({ onExit }) {
 
       const now = new Date();
       const todayStr = now.toISOString().slice(0,10);
-      
+      const weekAgo = new Date(now - 7*24*60*60*1000);
 
       const views   = events.filter(e=>e.type==="view");
       const builds  = events.filter(e=>e.type==="build");
