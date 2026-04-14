@@ -31,10 +31,21 @@ a:hover { text-decoration: underline; }
   gap: 12px;
 }
 .nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-weight: 800;
   font-size: 17px;
   color: #0f172a;
   letter-spacing: -0.3px;
+}
+.nav-logo:hover { text-decoration: none; }
+.nav-logo img {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 .nav-logo span { color: #2563eb; }
 .nav-links { display: flex; gap: 20px; align-items: center; font-size: 14px; }

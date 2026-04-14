@@ -471,7 +471,12 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
         <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-full opacity-[0.07]" style={{background:"radial-gradient(circle, #2563eb 0%, transparent 70%)"}} />
 
-        <div className="relative max-w-3xl mx-auto px-5 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
+        <div className="relative max-w-3xl mx-auto px-5 pt-12 pb-20 sm:pt-16 sm:pb-28 text-center">
+          {/* Brand logo */}
+          <div className="hero-anim-1 flex items-center justify-center gap-2.5 mb-8">
+            <img src="/favicon.ico" alt="Resume88 logo" width="36" height="36" className="rounded-lg" />
+            <span className="text-xl font-extrabold text-gray-900 tracking-tight">Resume<span className="text-blue-600">88</span></span>
+          </div>
           {/* Badge */}
           <div className="hero-anim-1 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-medium mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
@@ -740,7 +745,7 @@ function EditorLayout({resume,setResume,update,tmplId,pal,tab,setTab,onTemplates
       <div className="bg-white/95 backdrop-blur-sm border-b border-gray-100 px-4 py-2.5 flex items-center justify-between z-10">
         <div className="flex items-center gap-2.5">
           <button onClick={onBack} className="text-gray-300 hover:text-gray-500 px-1 transition-colors">←</button>
-          <span className="font-bold text-gray-800 text-sm hidden sm:block tracking-tight">Resume88</span>
+          <span className="font-bold text-gray-800 text-sm hidden sm:flex items-center gap-1.5 tracking-tight"><img src="/favicon.ico" alt="Resume88" width="18" height="18" className="rounded" />Resume88</span>
         </div>
         <div className="flex items-center gap-2">
           <div className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${scoreBg} ${scoreColor}`}>
@@ -1140,7 +1145,7 @@ function GuidedFlow({resume,setResume,step,setStep,update,onFinish,onSkip}) {
   return (
     <div className="min-h-screen bg-gray-50/80 flex flex-col">
       <div className="bg-white/95 backdrop-blur-sm border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-        <span className="font-bold text-gray-800 tracking-tight">Resume88</span>
+        <span className="font-bold text-gray-800 tracking-tight flex items-center gap-2"><img src="/favicon.ico" alt="Resume88" width="20" height="20" className="rounded" />Resume88</span>
         <div className="flex items-center gap-3">
           <span className="text-xs text-gray-400 font-medium">Step {step+1} of {GUIDED_STEPS.length}</span>
           <button onClick={onSkip} className="text-xs text-gray-400 hover:text-blue-600 transition-colors">Skip to Editor</button>
