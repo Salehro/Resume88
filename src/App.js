@@ -645,6 +645,8 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
             {t.builtBy} &middot;{" "}
             <a href="/blog/" className="text-gray-400 hover:text-blue-600 transition-colors">Blog</a>
             &middot;
+            <a href="/glossary/" className="text-gray-400 hover:text-blue-600 transition-colors">Glossary</a>
+            &middot;
             <a href="https://github.com/Salehro/resume88" target="_blank" rel="noreferrer" className="text-gray-400 hover:text-blue-600 transition-colors">GitHub</a>
             &middot;
             <button onClick={()=>setShowContact(s=>!s)} className="text-gray-400 hover:text-blue-600 transition-colors focus:outline-none">{t.contact}</button>
