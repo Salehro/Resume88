@@ -503,10 +503,12 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
           </div>
 
           {/* Secondary link */}
-          <div className="hero-anim-5 mt-4">
-            <button onClick={onManual} className="text-sm text-gray-400 hover:text-blue-600 transition-colors">
+          <div className="hero-anim-5 mt-4 flex items-center justify-center gap-5 text-sm text-gray-400">
+            <button onClick={onManual} className="hover:text-blue-600 transition-colors">
               {t.manual} &rarr;
             </button>
+            <span className="text-gray-200">&middot;</span>
+            <a href="/blog/" className="hover:text-blue-600 transition-colors">Resume Writing Guides</a>
           </div>
         </div>
       </section>
@@ -636,6 +638,8 @@ function StartScreen({onGuided,onManual,hasSaved,onAdmin}) {
         <div className="max-w-3xl mx-auto text-center">
           <p className="text-xs text-gray-400 flex items-center justify-center gap-2 flex-wrap">
             {t.builtBy} &middot;{" "}
+            <a href="/blog/" className="text-gray-400 hover:text-blue-600 transition-colors">Blog</a>
+            &middot;
             <a href="https://github.com/Salehro/resume88" target="_blank" rel="noreferrer" className="text-gray-400 hover:text-blue-600 transition-colors">GitHub</a>
             &middot;
             <button onClick={()=>setShowContact(s=>!s)} className="text-gray-400 hover:text-blue-600 transition-colors focus:outline-none">{t.contact}</button>
